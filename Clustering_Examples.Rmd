@@ -1,0 +1,162 @@
+---
+title: "bakerH_Week6_Assignment1"
+author: "Heath Baker"
+date: "6/18/2021"
+output:
+  word_document: default
+---
+
+```{r,include=FALSE}
+library(tidyverse)
+library(tidymodels)
+```
+
+```{r}
+trucks = read_csv("trucks.csv")
+```
+
+```{r}
+str(trucks)
+summary(trucks)
+```
+
+### Task 1:  
+```{r}
+ggplot(trucks, aes(x=Distance, y=Speeding)) + geom_point()
+```
+
+Yes - there appears to be at least 2 clusters, between distance 0-100, and above 100. Though possibly 4 natural clusters. 
+
+**The argument for 4:**  
+Distance < 100:  
+There are two masses. One Thick group at the bottom under speeding values of ~12.5,   
+and above speeding values of ~ 12.5  
+
+Distance > 100:  
+Speeding below 25 and above 25 seem to be two distinct groupings here.  
+
+
+### Task 2:  
+```{r}
+trucks = trucks %>% select(-Driver_ID)
+```
+
+```{r}
+
+kmeans_recipe = recipe(~ Distance + Speeding, trucks) 
+
+trucks_dummy = kmeans_recipe %>% 
+  step_scale(all_numeric()) %>%
+  step_center(all_numeric()) 
+
+trucks_dummy = prep(trucks_dummy, trucks) #prepares the recipe
+
+trucks_cleaned = bake(trucks_dummy, trucks) #applies the recipe and yields a data frame
+```
+
+```{r}
+#str(trucks_cleaned)
+summary(trucks_cleaned)
+```
+Means are now 0, should now be scaled and centered.  
+
+### Task 3:  
+
+Perform k-means clustering with a pre-specified number of clusters. We use the scaled and dummied data frame.  
+```{r}
+set.seed(64)
+clust1 = kmeans(trucks_cleaned, centers = 2)
+#clust
+```
+Attach cluster to dataset  
+```{r}
+trucks_clust1 = trucks
+```
+
+```{r}
+trucks_clust1 = augment(clust1, trucks)
+#str(trucks_clust1)
+```
+
+Plots  
+```{r}
+ggplot(trucks_clust1, aes(x=Distance,y=Speeding,color=factor(.cluster))) + geom_point() 
+```
+
+Clusters seem to be set to the obvious two groups of Distance > 100, and distance < 100.  
+Though there seems to be one outlier in group 1, Distance of around 120 or so.  
+
+### Task 4:  
+Perform k-means clustering with a pre-specified number of clusters.
+```{r}
+set.seed(412)
+clust2 = 
+  tibble(k = 1:8) %>%
+  mutate(
+    kclust = map(k, ~kmeans(trucks_cleaned, .x)),
+    tidied = map(kclust, tidy),
+    glanced = map(kclust, glance),
+    augmented = map(kclust, augment, trucks_cleaned)
+  )
+
+#clust2
+```
+
+```{r}
+clusters = 
+  clust2 %>%
+  unnest(cols = c(tidied))
+
+assignments = 
+  clust2 %>% 
+  unnest(cols = c(augmented))
+
+clusterings = 
+  clust2 %>%
+  unnest(cols = c(glanced))
+```
+
+```{r}
+p1 = 
+  ggplot(assignments, aes(x = Distance, y = Speeding)) +
+  geom_point(aes(color = .cluster), alpha = 0.8) + 
+  facet_wrap(~ k)
+p1
+```
+   
+I would still argue that 4 clusters is the best type of grouping for this dataset.  
+They seem to be distinct groups, and have more specified area than just the two obvious groups.  
+   
+### Task 5
+```{r}
+ggplot(clusterings, aes(k, tot.withinss)) +
+  geom_line() +
+  geom_point() + theme_bw()
+```
+
+It appears that, to be "within the elbow", k=4 seems to be the best value of k in this dataset.
+
+### Task 6:  
+```{r}
+set.seed(64)
+clust_final = kmeans(trucks_cleaned, centers = 4)
+```
+
+```{r}
+trucks = augment(clust_final, trucks)
+#str(trucks)
+```
+
+Plots  
+```{r}
+ggplot(trucks, aes(x=Distance,y=Speeding,color=factor(.cluster))) + geom_point() 
+```
+
+Though the cutoff points arent' exactly as I had predicted, the 4 groups are fairly close.  
+Obvious separations still exist at Distance 125.   
+
+Under 125:   
+There is a cluster barrier around Speeding 20,  
+
+Over 125:  
+There is a cluster barrier just around Speeding 38.  
